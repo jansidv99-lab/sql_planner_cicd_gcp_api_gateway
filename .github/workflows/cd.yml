@@ -1,0 +1,134 @@
+# =============================================================================
+# CD: Continuous Deployment to Cloud Run              (created in Phase 11)
+# Plan: plan/12_phase11_cd.md
+# =============================================================================
+# What CD does: DEPLOYS code that CI (ci.yml, Phase 10) has already verified.
+# It never runs tests itself, and it never runs for pull requests.
+#
+#   PR merged to main -> CI passes -> CD: auth (keyless) -> build -> push -> deploy -> smoke check
+#   CI fails          -> CD is skipped; production is unchanged
+#
+# One-time GCP setup (service accounts, secret, WIF provider, repo variables):
+#   scripts/gcp_setup.sh (Phase 11, Part A). The `vars.*` values below come from there.
+# =============================================================================
+
+name: CD
+
+# --- Triggers (Phase 11, step 11.7) -------------------------------------------
+# workflow_run: starts when the CI workflow finishes on main (the job below checks it passed).
+# workflow_dispatch: manual "Run workflow" button in the Actions tab (redeploy / roll forward).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# --- Security (Phase 11) ------------------------------------------------------
+# id-token: write lets GitHub issue a short-lived OIDC token that GCP exchanges for
+# deployer credentials (Workload Identity Federation): no service-account key exists.
+permissions:
+  contents: read
+  id-token: write
+
+# Never cancel a deploy halfway; a newer deploy waits for the running one.
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+env:
+  SERVICE: sql-planner # Cloud Run service name
+  AR_REPO: sql-planner # Artifact Registry repo (created by scripts/gcp_setup.sh)
+  SECRET_NAME: sql-planner-openai-api-key # Secret Manager secret (created by setup)
+
+jobs:
+  deploy:
+    # Deploy only when CI succeeded (or when started manually from main).
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      # Exactly the commit CI tested (workflow_run), or the current main (manual run).
+      COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.COMMIT_SHA }}
+
+      # --- Step 11.8: authenticate to GCP without keys --------------------------
+      # Only this repo's main branch is accepted by the WIF provider's condition.
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v3
+
+      # --- Step 11.9: build and push the image (tag = commit SHA) -----------------
+      # Same Dockerfile CI built and smoke-tested (Phase 9). The SHA tag makes every
+      # deployed version traceable and keeps old images available for rollback.
+      - name: Build and push image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/app:${COMMIT_SHA}"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build -t "${IMAGE}" .
+          docker push "${IMAGE}"
+
+      # --- Step 11.10: deploy to Cloud Run --------------------------------------
+      # - runtime SA: can read only its own secret
+      # - API key from Secret Manager at runtime (never in the image or GitHub)
+      # - scale to zero when idle; at most 2 instances (caps cost and LLM spend)
+      # - session affinity + long timeout: Streamlit keeps a WebSocket per browser session
+      # - startup probe: traffic only after Streamlit's health endpoint answers
+      # Access (public or not) is NOT changed here: the deployer role can't change it,
+      # by design (one-time owner decision, Phase 11 step 11.13).
+      - name: Deploy to Cloud Run
+        env:
+          RUNTIME_SA: ${{ vars.RUNTIME_SA }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          MODEL: ${{ vars.MODEL }}
+        run: |
+          gcloud run deploy "${SERVICE}" \
+            --project "${PROJECT_ID}" --region "${REGION}" \
+            --image "${IMAGE}" \
+            --service-account "${RUNTIME_SA}" \
+            --set-secrets "OPENAI_API_KEY=${SECRET_NAME}:latest" \
+            --set-env-vars "OPENAI_BASE_URL=${OPENAI_BASE_URL},MODEL=${MODEL}" \
+            --port 8080 --cpu 1 --memory 1Gi \
+            --min-instances 0 --max-instances 2 \
+            --session-affinity --timeout 3600 \
+            --startup-probe "httpGet.path=/_stcore/health,periodSeconds=5,failureThreshold=12" \
+            --labels "app=sql-planner,commit=${COMMIT_SHA:0:12}" \
+            --quiet
+          URL="$(gcloud run services describe "${SERVICE}" --project "${PROJECT_ID}" \
+                 --region "${REGION}" --format='value(status.url)')"
+          echo "URL=${URL}" >> "$GITHUB_ENV"
+
+      # --- Step 11.11: smoke check the live service -------------------------------
+      # Uses an identity token so the check also works while the service is private.
+      - name: Smoke check
+        run: |
+          TOKEN="$(gcloud auth print-identity-token --audiences="${URL}" 2>/dev/null || true)"
+          AUTH=()
+          [ -n "${TOKEN}" ] && AUTH=(-H "Authorization: Bearer ${TOKEN}")
+          for i in $(seq 1 12); do
+            if curl -fsS "${AUTH[@]}" "${URL}/_stcore/health"; then
+              echo " <- health OK"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Health check failed. Logs: https://console.cloud.google.com/run/detail/${REGION}/${SERVICE}/logs?project=${PROJECT_ID}"
+          exit 1
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### CD: ${SERVICE}"
+            echo "- Commit: \`${COMMIT_SHA}\`"
+            echo "- Image: \`${IMAGE:-not built}\`"
+            echo "- URL: ${URL:-not deployed}"
+            echo "- Rollback: \`gcloud run services update-traffic ${SERVICE} --region ${REGION} --to-revisions <previous-revision>=100\`"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project status
 
 Phases 0–10 are done: app, quality gate, Docker image (verified in CI) and GitHub Actions CI.
-CD to Cloud Run (Phase 11) and logging/tracing (Phase 12) are next
+Phase 11 (CD to Cloud Run) is in progress; logging/tracing (Phase 12) is next
 (see `plan/00_master_plan.md`). Python 3.11, with dependencies pinned in `requirements*.txt`.
 
 ## Architecture
@@ -68,6 +68,22 @@ values); mount it read-only instead and let python-dotenv parse it. The image co
 - `git push` authenticates via Git Credential Manager; the `gh` token has no `workflow` scope.
 - Branch protection isn't available (private repo on a free plan), so "CI green before merge"
   is a convention, not enforced by GitHub.
+
+## CD (Cloud Run)
+
+- `.github/workflows/cd.yml` runs after CI succeeds on `main` (`workflow_run`) or manually
+  (`workflow_dispatch`): keyless auth (WIF) → build → push to Artifact Registry (tag = commit SHA)
+  → `gcloud run deploy sql-planner` (region `asia-south1`) → health check. `workflow_run` only
+  uses the workflow file from `main`, so CD changes can't be tested on a PR.
+- One-time setup is `scripts/gcp_setup.sh` (re-runnable). Dedicated resources: repo `sql-planner`,
+  secret `sql-planner-openai-api-key`, SAs `sql-planner-runtime` / `sql-planner-deployer`, WIF
+  provider `github-sql-planner` (only this repo's `main`). Config lives in GitHub repo variables.
+- The same GCP project hosts another app's resources (`gh-deployer`, `run-runtime`,
+  `github-provider`, repo `apps`, secret `openai-api-key`): never modify them.
+- The deployer has `run.developer`, so CD can't change who may invoke the service; making it
+  public is a one-time owner action (`add-iam-policy-binding ... --member=allUsers`).
+- Rollback: `gcloud run services update-traffic sql-planner --region asia-south1
+  --to-revisions <previous-revision>=100`, or re-run CD from the Actions tab.
 
 ## Goal
 
