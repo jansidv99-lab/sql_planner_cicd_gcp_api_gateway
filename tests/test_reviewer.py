@@ -23,27 +23,47 @@ def fails(sql, cols=ALL, contains=""):
 
 # ---------- pass cases ----------
 
+
 @pytest.mark.parametrize(
     ("sql", "cols"),
     [
         # real SQL from the Phase 4 manual check
-        (("SELECT product, SUM(amount) AS total_sales FROM sales GROUP BY product "
-         "ORDER BY total_sales DESC LIMIT 5"), ["product", "amount"]),
+        (
+            (
+                "SELECT product, SUM(amount) AS total_sales FROM sales GROUP BY product "
+                "ORDER BY total_sales DESC LIMIT 5"
+            ),
+            ["product", "amount"],
+        ),
         ("SELECT COUNT(*) AS n FROM sales", ["amount"]),
-        (("SELECT product FROM sales WHERE amount > 100 GROUP BY product "
-         "HAVING SUM(quantity) > 10"), ["product", "amount", "quantity"]),
+        (
+            (
+                "SELECT product FROM sales WHERE amount > 100 GROUP BY product "
+                "HAVING SUM(quantity) > 10"
+            ),
+            ["product", "amount", "quantity"],
+        ),
         ("SELECT s.product, s.amount FROM sales AS s", ["product", "amount"]),
         ("SELECT sales.product FROM sales", ["product"]),
-        (("WITH t AS (SELECT product, SUM(amount) AS total FROM sales GROUP BY product) "
-         "SELECT product, total FROM t ORDER BY total DESC"), ["product", "amount"]),
+        (
+            (
+                "WITH t AS (SELECT product, SUM(amount) AS total FROM sales GROUP BY product) "
+                "SELECT product, total FROM t ORDER BY total DESC"
+            ),
+            ["product", "amount"],
+        ),
         ("SELECT product FROM sales UNION ALL SELECT product FROM sales", ["product"]),
         ("SELECT x.product FROM (SELECT product FROM sales) AS x", ["product"]),
         ("SELECT product FROM sales;", ["product"]),
         ("SELECT AMOUNT FROM SALES", ["amount"]),
         ("SELECT `amount` FROM `sales`", ["amount"]),
-        (("SELECT EXTRACT(YEAR FROM order_date) AS y, SUM(amount) AS total FROM sales "
-         "WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY) GROUP BY y"),
-         ["order_date", "amount"]),
+        (
+            (
+                "SELECT EXTRACT(YEAR FROM order_date) AS y, SUM(amount) AS total FROM sales "
+                "WHERE order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY) GROUP BY y"
+            ),
+            ["order_date", "amount"],
+        ),
     ],
 )
 def test_valid_queries_pass(sql, cols):
@@ -56,6 +76,7 @@ def test_formatted_sql_is_multiline():
 
 
 # ---------- fail cases: parse / statements / read-only ----------
+
 
 @pytest.mark.parametrize(
     "sql", ["SELEC product FROM sales", "SELECT product FROM sales WHERE", "SELECT 'abc"]
@@ -90,13 +111,16 @@ def test_non_select_rejected(sql, kind):
 
 # ---------- fail cases: tables / star / columns ----------
 
+
 def test_unknown_table():
     fails("SELECT amount FROM customers", contains="Unknown table: customers")
 
 
 def test_unknown_table_in_subquery():
-    fails("SELECT amount FROM sales WHERE product IN (SELECT name FROM products)",
-          contains="Unknown table: products")
+    fails(
+        "SELECT amount FROM sales WHERE product IN (SELECT name FROM products)",
+        contains="Unknown table: products",
+    )
 
 
 def test_qualified_sales_table_rejected():
@@ -109,7 +133,9 @@ def test_star_rejected(sql):
 
 
 def test_unselected_schema_column():
-    fails("SELECT product, quantity FROM sales", ["product"], contains="Column not selected: quantity")
+    fails(
+        "SELECT product, quantity FROM sales", ["product"], contains="Column not selected: quantity"
+    )
 
 
 def test_unknown_column():
@@ -121,8 +147,11 @@ def test_bad_qualifier():
 
 
 def test_alias_cannot_hide_unselected_column():
-    fails("SELECT quantity AS quantity FROM sales", ["amount"],
-          contains="Alias reuses a column that wasn't selected: quantity")
+    fails(
+        "SELECT quantity AS quantity FROM sales",
+        ["amount"],
+        contains="Alias reuses a column that wasn't selected: quantity",
+    )
 
 
 def test_all_errors_reported_together():

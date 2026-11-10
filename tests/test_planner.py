@@ -33,7 +33,7 @@ def test_returns_outline():
 def test_prompt_has_only_selected_columns():
     llm = FakeLLM()
     make_plan("top products", ["product", "amount"], llm=llm)
-    (_, user), = llm.calls
+    ((_, user),) = llm.calls
     assert "product" in user and "amount" in user
     assert "order_date" not in user and "quantity" not in user
 
@@ -41,7 +41,7 @@ def test_prompt_has_only_selected_columns():
 def test_request_wrapped_in_tags():
     llm = FakeLLM()
     make_plan("  top 5 products  ", ["product"], llm=llm)
-    (_, user), = llm.calls
+    ((_, user),) = llm.calls
     assert "<request>\ntop 5 products\n</request>" in user
 
 
@@ -51,7 +51,9 @@ def test_uses_planner_system_prompt():
     assert llm.calls[0][0] == PLANNER_SYSTEM
 
 
-@pytest.mark.parametrize("reply", ["CANNOT_ANSWER: no region column", "cannot_answer: no region column"])
+@pytest.mark.parametrize(
+    "reply", ["CANNOT_ANSWER: no region column", "cannot_answer: no region column"]
+)
 def test_cannot_answer_raises_with_reason(reply):
     with pytest.raises(CannotAnswerError) as exc:
         make_plan("sales by region", ["amount"], llm=FakeLLM(reply=reply))

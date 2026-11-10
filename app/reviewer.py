@@ -57,9 +57,7 @@ def _check_stars(stmt: exp.Expression) -> list[str]:
     return []
 
 
-def _check_columns(
-    stmt: exp.Expression, selected: set[str], qualifiers: set[str]
-) -> list[str]:
+def _check_columns(stmt: exp.Expression, selected: set[str], qualifiers: set[str]) -> list[str]:
     errors: list[str] = []
     unselected = set(COLUMN_NAMES) - selected
 

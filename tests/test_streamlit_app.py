@@ -103,8 +103,12 @@ def test_llm_error_shows_message(fake_chain):
 
 
 def test_submit_passes_inputs_to_chain_once(fake_chain):
-    _submit(ChainResult(Status.INPUT_ERROR, "Enter a request"), fake_chain,
-            columns=("amount", "order_date"), request="monthly totals")
+    _submit(
+        ChainResult(Status.INPUT_ERROR, "Enter a request"),
+        fake_chain,
+        columns=("amount", "order_date"),
+        request="monthly totals",
+    )
     assert len(fake_chain.calls) == 1
     request, columns = fake_chain.calls[0]
     assert request == "monthly totals"

@@ -40,5 +40,5 @@ def make_plan(request: str, selected_columns: Iterable[str], llm: LLMFn = comple
     reply = llm(PLANNER_SYSTEM, planner_user_prompt(schema_block, request)).strip()
 
     if reply.upper().startswith(CANNOT_ANSWER_PREFIX):
-        raise CannotAnswerError(reply[len(CANNOT_ANSWER_PREFIX):].strip() or "no reason given")
+        raise CannotAnswerError(reply[len(CANNOT_ANSWER_PREFIX) :].strip() or "no reason given")
     return reply

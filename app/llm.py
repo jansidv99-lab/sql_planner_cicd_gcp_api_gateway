@@ -78,4 +78,6 @@ if __name__ == "__main__":
     # Manual smoke check: one tiny real API call using your .env settings.
     s = load_settings()
     print(f"model={s.model} base_url={s.openai_base_url}")
-    print("reply:", complete("You are a test endpoint.", "Reply with the single word: OK", settings=s))
+    print(
+        "reply:", complete("You are a test endpoint.", "Reply with the single word: OK", settings=s)
+    )

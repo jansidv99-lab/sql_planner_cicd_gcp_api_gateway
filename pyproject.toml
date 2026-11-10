@@ -1,6 +1,10 @@
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+extend-exclude = ["plan"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff.format]
+quote-style = "double"

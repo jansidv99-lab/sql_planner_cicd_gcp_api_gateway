@@ -52,7 +52,7 @@ def test_write_sql_returns_clean_sql():
 def test_prompt_has_only_selected_columns():
     llm = FakeLLM()
     write_sql(OUTLINE, ["product", "amount"], llm=llm)
-    (_, user), = llm.calls
+    ((_, user),) = llm.calls
     assert "- product" in user and "- amount" in user
     assert "order_date" not in user and "quantity" not in user
 
@@ -60,7 +60,7 @@ def test_prompt_has_only_selected_columns():
 def test_outline_in_tags_and_coder_system_prompt():
     llm = FakeLLM()
     write_sql(OUTLINE, ["product", "amount"], llm=llm)
-    (system, user), = llm.calls
+    ((system, user),) = llm.calls
     assert system == CODER_SYSTEM
     assert f"<outline>\n{OUTLINE}\n</outline>" in user
 
