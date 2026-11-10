@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phases 0–11 are done: app, quality gate, Docker image, GitHub Actions CI, and CD to Cloud Run
-(public: https://sql-planner-309866353676.asia-south1.run.app). Logging/tracing (Phase 12) is next
+All phases (0–12) are done: app, quality gate, Docker image, GitHub Actions CI, CD to Cloud Run
+(public: https://sql-planner-309866353676.asia-south1.run.app) and logging/tracing. Status table: `plan/00_master_plan.md`
 (see `plan/00_master_plan.md`). Python 3.11, with dependencies pinned in `requirements*.txt`.
 
 ## Architecture
@@ -99,6 +99,11 @@ values); mount it read-only instead and let python-dotenv parse it. The image co
   or span attributes (`tests/test_observability.py` checks this).
 - Tests: `tests/conftest.py` installs an in-memory span exporter (`spans` fixture) and resets the
   `app` logger after each test.
+- Log lines must be written while the relevant span is active, or they lose the trace link.
+- To inspect production: `gcloud logging read 'resource.labels.service_name="sql-planner" AND
+  jsonPayload.message="chain finished"'`, then fetch the trace by ID
+  (`GET cloudtrace.googleapis.com/v1/projects/<project>/traces/<id>`); the v1 list endpoint
+  returned nothing during verification.
 
 ## Goal
 

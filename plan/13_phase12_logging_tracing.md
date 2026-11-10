@@ -1,6 +1,6 @@
 # Phase 12 — Logging and Tracing (detailed plan)
 
-**Status:** DRAFT, waiting for review and permission.
+**Status:** DONE. Decisions: google-cloud-logging (`StructuredLogHandler`), OpenTelemetry → Cloud Trace, every run sampled, privacy rule, runtime SA granted `cloudtrace.agent`. PR #4 deployed; production check found log entries had no trace link (log written after the span closed): fixed in PR #5 with a regression test. Verified on revision `sql-planner-00005`: log entry (status ok, durations, no request text) links to trace `718b7d87…` with spans chain.run → planner/coder (→ llm.complete with token counts) / reviewer. Note: the Cloud Trace v1 *list* endpoint returned no traces; fetching a trace **by ID** works.
 **Part of:** [00_master_plan.md](00_master_plan.md) (split out of Phase 6 at your request)
 **Depends on:** Phase 6 (chain to instrument) ✅, Phase 2 (LLM client) ✅, Phase 7 (UI entry point) ✅, Phase 11 (Cloud Run + CD, to verify in production) ✅.
 **Unblocks:** nothing; this is the last planned phase.

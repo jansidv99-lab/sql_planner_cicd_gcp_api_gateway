@@ -1,6 +1,22 @@
 # SQL Script Generator — Master Plan
 
-**Status:** DRAFT, waiting for review. No code will be written until this plan is approved and permission is given for each phase.
+**Status:** ✅ ALL PHASES DONE (2026-11-10). Live app: https://sql-planner-309866353676.asia-south1.run.app
+
+| Phase | Plan doc | Result |
+|---|---|---|
+| 0 Setup | `01_phase0_project_setup.md` | ✅ |
+| 1 Config + schema | `02_phase1_config_schema.md` | ✅ |
+| 2 LLM client | `03_phase2_llm_client.md` | ✅ |
+| 3 Planner | `04_phase3_planner.md` | ✅ |
+| 4 Coder | `05_phase4_coder.md` | ✅ |
+| 5 Reviewer | `06_phase5_reviewer.md` | ✅ |
+| 6 Chain | `07_phase6_chain.md` | ✅ |
+| 7 Streamlit UI | `08_phase7_streamlit_ui.md` | ✅ |
+| 8 Tests + quality gate | `09_phase8_tests_quality.md` | ✅ 139 tests, 100 % coverage of `app/` |
+| 9 Docker | `10_phase9_docker.md` | ✅ verified in CI (not built locally) |
+| 10 CI (GitHub Actions) | `11_phase10_ci.md` | ✅ PR #1 (branch protection unavailable on free private repo) |
+| 11 CD (Cloud Run) | `12_phase11_cd.md` | ✅ PRs #2, #3 |
+| 12 Logging + tracing | `13_phase12_logging_tracing.md` | ✅ PRs #4, #5 (trace-link fix) |
 
 ---
 
