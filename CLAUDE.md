@@ -4,8 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-New project: no code, dependencies, or tooling exist yet. When build/test/lint/run commands
-and the module layout are created, add them to this file.
+Phase 0 (setup) is done; `app/*.py` and `streamlit_app.py` are placeholders filled in by later
+phases (see `plan/00_master_plan.md`). Python 3.11, with dependencies pinned in `requirements*.txt`.
+
+## Commands
+
+Run from the project root in PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1                    # activate the venv
+pip install -r requirements-dev.txt           # install runtime + dev deps
+ruff check .                                  # lint
+pytest                                        # all tests (LLM is mocked; no API key needed)
+pytest tests/test_schema.py::test_name        # a single test
+streamlit run streamlit_app.py                # run the UI (from Phase 7)
+```
+
+
 
 ## Goal
 

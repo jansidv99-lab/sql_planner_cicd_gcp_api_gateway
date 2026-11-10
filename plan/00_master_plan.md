@@ -29,12 +29,12 @@ UI shows: the outline, the SQL and the review result
 
 Table: `sales`
 
-| Column       | Type            | Meaning                         |
+| Column       | Type (BigQuery) | Meaning                         |
 |--------------|-----------------|---------------------------------|
 | `order_date` | `DATE`          | Date the order was placed       |
-| `quantity`   | `INTEGER`       | Number of units ordered         |
-| `product`    | `VARCHAR`       | Product name                    |
-| `amount`     | `DECIMAL(10,2)` | Order value (currency)          |
+| `quantity`   | `INT64`         | Number of units ordered         |
+| `product`    | `STRING`        | Product name                    |
+| `amount`     | `NUMERIC`       | Order value (currency)          |
 
 **How this prevents hallucination:**
 1. The user can only **select** columns from this list in the UI. They can't type column names.
