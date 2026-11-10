@@ -265,3 +265,19 @@ def test_llm_span_records_sdk_error_type(spans):
     assert llm_span.attributes["llm.sdk_error_type"] == "APITimeoutError"
     assert llm_span.attributes["error.type"] == "LLMError"
     assert "sk-secret-value" not in json.dumps(dict(llm_span.attributes))
+
+
+def test_chain_log_entry_links_to_its_own_trace(monkeypatch, spans):
+    """Regression: the `chain finished` line must be written inside the `chain.run` span,
+    otherwise Cloud Logging can't link it to the trace (seen in production, Phase 12)."""
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "demo-project")
+    stream = io.StringIO()
+    observability.setup_logging(stream=stream)
+
+    run(SECRET_REQUEST, COLS, llm=ScriptedLLM("CANNOT_ANSWER: no date column"))
+
+    entries = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
+    (entry,) = [e for e in entries if e.get("message") == "chain finished"]
+    root = _by_name(spans)["chain.run"]
+    trace_id = format(root.context.trace_id, "032x")
+    assert entry["logging.googleapis.com/trace"] == f"projects/demo-project/traces/{trace_id}"

@@ -77,20 +77,22 @@ def run(request: str, selected_columns: Iterable[str], llm: LLMFn = complete) ->
         if error_type:
             mark_error(root, error_type)
 
-    logger.log(
-        _LOG_LEVEL[result.status],
-        "chain finished",
-        extra={
-            "json_fields": {
-                "status": result.status.value,
-                "error_type": error_type,
-                "columns": list(result.columns),
-                "review_error_count": len(result.review.errors) if result.review else None,
-                "duration_ms": durations,
-                **_meta(request_chars),
-            }
-        },
-    )
+        # Logged while the `chain.run` span is still active, so the log entry carries this
+        # run's trace ID and links to the trace in Cloud Logging.
+        logger.log(
+            _LOG_LEVEL[result.status],
+            "chain finished",
+            extra={
+                "json_fields": {
+                    "status": result.status.value,
+                    "error_type": error_type,
+                    "columns": list(result.columns),
+                    "review_error_count": len(result.review.errors) if result.review else None,
+                    "duration_ms": durations,
+                    **_meta(request_chars),
+                }
+            },
+        )
     return result
 
 
