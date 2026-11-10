@@ -20,8 +20,6 @@ pytest tests/test_schema.py::test_name        # a single test
 streamlit run streamlit_app.py                # run the UI (from Phase 7)
 ```
 
-
-
 ## Goal
 
 Implement a "SQL script generator" as a prompt chain in Python:
