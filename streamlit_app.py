@@ -7,12 +7,22 @@ and `config.load_settings`.
 
 import streamlit as st
 
-from app import chain, config
+from app import chain, config, observability
 from app.chain import ChainResult, Status
 from app.planner import MAX_REQUEST_CHARS
 from app.schema import COLUMN_NAMES, COLUMNS, TABLE_NAME
 
 st.set_page_config(page_title="SQL Script Generator", page_icon="🧮")
+
+
+# --- 12.5 logging and tracing: set up once per process, not on every rerun ---
+@st.cache_resource
+def _init_observability() -> bool:
+    observability.setup_logging()
+    return observability.setup_tracing()
+
+
+_init_observability()
 
 # --- 7.1 header and schema --------------------------------------------------
 st.title("SQL Script Generator")

@@ -2,19 +2,29 @@
 
 Expected failures come back as a Status + friendly message, with any partial results kept
 (e.g. the outline when the Coder fails). Unexpected exceptions are bugs and propagate.
+
+Phase 12: each run is one trace (`chain.run` with child spans `planner`, `coder`, `reviewer`)
+and ends with one structured log line `chain finished`. Only metadata is recorded.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 
+from opentelemetry import trace
+
 from app.coder import CoderError, write_sql
 from app.llm import LLMError, LLMFn, complete
+from app.observability import mark_error, span
 from app.planner import CannotAnswerError, PlannerError, make_plan
 from app.reviewer import ReviewResult, review_sql
 from app.schema import SchemaError, validate_selection
+
+logger = logging.getLogger(__name__)
+_tracer = trace.get_tracer(__name__)
 
 
 class Status(str, Enum):
@@ -24,6 +34,16 @@ class Status(str, Enum):
     INPUT_ERROR = "input_error"
     CODER_ERROR = "coder_error"
     LLM_ERROR = "llm_error"
+
+
+_LOG_LEVEL = {
+    Status.OK: logging.INFO,
+    Status.CANNOT_ANSWER: logging.INFO,
+    Status.INPUT_ERROR: logging.INFO,
+    Status.REVIEW_FAILED: logging.WARNING,
+    Status.CODER_ERROR: logging.ERROR,
+    Status.LLM_ERROR: logging.ERROR,
+}
 
 
 @dataclass(frozen=True)
@@ -41,35 +61,81 @@ class ChainResult:
 
 
 def run(request: str, selected_columns: Iterable[str], llm: LLMFn = complete) -> ChainResult:
+    request_chars = len((request or "").strip())
+    durations: dict[str, int] = {}
+    with span(_tracer, "chain.run", request_chars=request_chars) as root:
+        try:
+            result, error_type = _run_steps(request, selected_columns, llm, durations)
+        except Exception as err:
+            logger.exception(
+                "chain crashed",
+                extra={"json_fields": {"error_type": type(err).__name__, **_meta(request_chars)}},
+            )
+            raise
+        root.set_attribute("status", result.status.value)
+        root.set_attribute("columns", list(result.columns))
+        if error_type:
+            mark_error(root, error_type)
+
+    logger.log(
+        _LOG_LEVEL[result.status],
+        "chain finished",
+        extra={
+            "json_fields": {
+                "status": result.status.value,
+                "error_type": error_type,
+                "columns": list(result.columns),
+                "review_error_count": len(result.review.errors) if result.review else None,
+                "duration_ms": durations,
+                **_meta(request_chars),
+            }
+        },
+    )
+    return result
+
+
+def _meta(request_chars: int) -> dict:
+    return {"request_chars": request_chars}
+
+
+def _run_steps(
+    request: str, selected_columns: Iterable[str], llm: LLMFn, durations: dict[str, int]
+) -> tuple[ChainResult, str | None]:
+    """The chain logic (unchanged from Phase 6). Returns the result and the error type, if any."""
     # Validate the column selection first: no LLM call for a bad selection.
     try:
         columns = validate_selection(selected_columns)
     except SchemaError as err:
-        return ChainResult(Status.INPUT_ERROR, str(err))
+        return ChainResult(Status.INPUT_ERROR, str(err)), type(err).__name__
 
     # [1] Planner
     try:
-        outline = make_plan(request, columns, llm)
+        with span(_tracer, "planner", durations):
+            outline = make_plan(request, columns, llm)
     except CannotAnswerError as err:  # subclass of PlannerError: check first
-        return ChainResult(Status.CANNOT_ANSWER, str(err), columns)
+        return ChainResult(Status.CANNOT_ANSWER, str(err), columns), type(err).__name__
     except PlannerError as err:
-        return ChainResult(Status.INPUT_ERROR, str(err), columns)
+        return ChainResult(Status.INPUT_ERROR, str(err), columns), type(err).__name__
     except LLMError as err:
-        return ChainResult(Status.LLM_ERROR, str(err), columns)
+        return ChainResult(Status.LLM_ERROR, str(err), columns), type(err).__name__
 
     # [2] Coder
     try:
-        sql = write_sql(outline, columns, llm)
+        with span(_tracer, "coder", durations):
+            sql = write_sql(outline, columns, llm)
     except CoderError as err:
-        return ChainResult(Status.CODER_ERROR, str(err), columns, outline)
+        return ChainResult(Status.CODER_ERROR, str(err), columns, outline), type(err).__name__
     except LLMError as err:
-        return ChainResult(Status.LLM_ERROR, str(err), columns, outline)
+        return ChainResult(Status.LLM_ERROR, str(err), columns, outline), type(err).__name__
 
     # [3] Reviewer (gate)
-    review = review_sql(sql, columns)
+    with span(_tracer, "reviewer", durations) as current:
+        review = review_sql(sql, columns)
+        current.set_attribute("review.passed", review.passed)
+        current.set_attribute("review.error_count", len(review.errors))
     if review.passed:
-        return ChainResult(Status.OK, None, columns, outline, sql, review)
-    return ChainResult(
+        return ChainResult(Status.OK, None, columns, outline, sql, review), None
+    result = ChainResult(
         Status.REVIEW_FAILED,
         "The generated SQL failed the review checks",
         columns,
@@ -77,3 +143,4 @@ def run(request: str, selected_columns: Iterable[str], llm: LLMFn = complete) ->
         sql,
         review,
     )
+    return result, "ReviewFailed"

@@ -86,6 +86,20 @@ values); mount it read-only instead and let python-dotenv parse it. The image co
 - Rollback: `gcloud run services update-traffic sql-planner --region asia-south1
   --to-revisions <previous-revision>=100`, or re-run CD from the Actions tab.
 
+## Logging and tracing (Phase 12)
+
+- `app/observability.py`: `setup_logging()` attaches google-cloud-logging's `StructuredLogHandler`
+  (JSON on stdout → Cloud Logging, auto-linked to the active trace; needs no credentials) to the
+  `app` logger; `setup_tracing()` installs OpenTelemetry → Cloud Trace (every run sampled) only on
+  Cloud Run (`K_SERVICE`) or with `TRACING_ENABLED=true`. Both are called once from
+  `streamlit_app.py` via `st.cache_resource`.
+- Each chain run = trace `chain.run` → `planner`/`coder` (→ `llm.complete`) / `reviewer`, plus one
+  log line `chain finished` (status, error type, columns, durations). Use `observability.span()`,
+  which records only the error **type**: never put request text, prompts, outline or SQL in logs
+  or span attributes (`tests/test_observability.py` checks this).
+- Tests: `tests/conftest.py` installs an in-memory span exporter (`spans` fixture) and resets the
+  `app` logger after each test.
+
 ## Goal
 
 Implement a "SQL script generator" as a prompt chain in Python:

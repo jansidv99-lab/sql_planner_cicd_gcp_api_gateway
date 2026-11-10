@@ -127,5 +127,12 @@ setvar RUNTIME_SA "$RUNTIME_SA"
 setvar OPENAI_BASE_URL "$(env_get OPENAI_BASE_URL)"
 setvar MODEL "$(env_get MODEL)"
 
+# --- 12.7 Runtime SA may write traces (Phase 12) ------------------------------
+# roles/cloudtrace.agent can only WRITE trace data. Logs need no role: Cloud Run
+# collects the app's stdout (structured JSON) automatically.
+step "12.7 Runtime service account: Cloud Trace writer"
+run g projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:$RUNTIME_SA" --role=roles/cloudtrace.agent --condition=None >/dev/null
+
 echo
 echo "Setup complete."

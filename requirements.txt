@@ -2,3 +2,7 @@ openai==3.49.0
 streamlit==1.67.0
 sqlglot==30.30.0
 python-dotenv==1.2.4
+google-cloud-logging==3.17.0
+opentelemetry-sdk==1.45.2
+opentelemetry-exporter-gcp-trace==1.15.0
+opentelemetry-resourcedetector-gcp==1.14.0

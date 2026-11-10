@@ -6,8 +6,12 @@ import functools
 from collections.abc import Callable
 
 import openai
+from opentelemetry import trace
 
 from app.config import Settings, load_settings
+from app.observability import span
+
+_tracer = trace.get_tracer(__name__)
 
 LLMFn = Callable[[str, str], str]
 """Any function taking (system_prompt, user_prompt) and returning the reply text."""
@@ -56,22 +60,31 @@ def complete(
     settings = settings or load_settings()
     client = client or get_client(settings)
 
-    try:
-        response = client.chat.completions.create(
-            model=settings.model,
-            temperature=0,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        )
-    except openai.OpenAIError as err:
-        raise LLMError(_friendly_message(err)) from err
+    # Phase 12: one span per LLM call with model and token usage; never prompt or reply text.
+    with span(_tracer, "llm.complete", **{"llm.model": settings.model}) as current:
+        try:
+            response = client.chat.completions.create(
+                model=settings.model,
+                temperature=0,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            )
+        except openai.OpenAIError as err:
+            current.set_attribute("llm.sdk_error_type", type(err).__name__)
+            raise LLMError(_friendly_message(err)) from err
 
-    content = response.choices[0].message.content if response.choices else None
-    if not content or not content.strip():
-        raise LLMError("The model returned an empty response")
-    return content.strip()
+        usage = getattr(response, "usage", None)
+        for field in ("prompt_tokens", "completion_tokens"):
+            value = getattr(usage, field, None)
+            if isinstance(value, int):
+                current.set_attribute(f"llm.{field}", value)
+
+        content = response.choices[0].message.content if response.choices else None
+        if not content or not content.strip():
+            raise LLMError("The model returned an empty response")
+        return content.strip()
 
 
 if __name__ == "__main__":
