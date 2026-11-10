@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phases 0–8 are done (app runs locally, quality gate in place); Docker, CI, CD and
-logging/tracing are next
+Phases 0–8 are done (app runs locally, quality gate in place). Phase 9's `Dockerfile` is written
+but not yet built locally (Docker Desktop wasn't running); CI, CD and logging/tracing are next
 (see `plan/00_master_plan.md`). Python 3.11, with dependencies pinned in `requirements*.txt`.
 
 ## Architecture
@@ -45,6 +45,16 @@ Quality gate (CI runs exactly this; all must pass):
 ruff check .; ruff format --check .; pytest --cov   # coverage of app/ must be >= 90%
 ```
 
+Docker (requires Docker Desktop running):
+
+```powershell
+docker build -t sql-planner:local .
+docker run --rm -p 8080:8080 -v "${PWD}/.env:/app/.env:ro" sql-planner:local   # http://localhost:8080
+```
+
+`.env` values are quoted, so don't use `docker run --env-file .env` (it keeps the quotes in the
+values); mount it read-only instead and let python-dotenv parse it. The image contains no secrets.
+
 `tests/conftest.py` fails any test that builds the real OpenAI client: pass a fake `llm=`
 (Planner/Coder/chain) or `client=` (`app.llm.complete`) instead.
 
@@ -79,3 +89,4 @@ Implement a "SQL script generator" as a prompt chain in Python:
 2. **Review:** ask the user to review the plan doc.
 3. **Permission:** always ask for permission before making any change to code.
 4. **Phased implementation:** plan code phase by phase, step by step, stating the purpose of each step and its dependencies.
+5. **Commit step:** always ask for permission before every commit

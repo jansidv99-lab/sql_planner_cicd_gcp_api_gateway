@@ -1,0 +1,18 @@
+# Secrets: never in the build context or image (supplied at runtime)
+.env
+.env.*
+
+# Local environment, VCS and tooling
+.venv/
+.git/
+.github/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# Not needed at runtime
+tests/
+plan/
+*.md
