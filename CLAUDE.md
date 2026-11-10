@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phases 0–7 are done (app runs locally); Docker, CI, CD and logging/tracing are next
+Phases 0–8 are done (app runs locally, quality gate in place); Docker, CI, CD and
+logging/tracing are next
 (see `plan/00_master_plan.md`). Python 3.11, with dependencies pinned in `requirements*.txt`.
 
 ## Architecture
@@ -31,10 +32,21 @@ Run from the project root in PowerShell:
 .venv\Scripts\Activate.ps1                    # activate the venv
 pip install -r requirements-dev.txt           # install runtime + dev deps
 ruff check .                                  # lint
-pytest                                        # all tests (LLM is mocked; no API key needed)
+ruff format .                                 # auto-format (plan/ is excluded)
+pytest                                        # all tests (LLM is faked; no API key needed)
 pytest tests/test_schema.py::test_name        # a single test
-streamlit run streamlit_app.py                # run the UI (from Phase 7)
+streamlit run streamlit_app.py                # run the UI
+python -m app.llm                             # one real LLM smoke call (costs a request)
 ```
+
+Quality gate (CI runs exactly this; all must pass):
+
+```powershell
+ruff check .; ruff format --check .; pytest --cov   # coverage of app/ must be >= 90%
+```
+
+`tests/conftest.py` fails any test that builds the real OpenAI client: pass a fake `llm=`
+(Planner/Coder/chain) or `client=` (`app.llm.complete`) instead.
 
 ## Goal
 

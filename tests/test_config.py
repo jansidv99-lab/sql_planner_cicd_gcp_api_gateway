@@ -43,3 +43,23 @@ def test_secret_not_in_error_message():
 
 def test_secret_not_in_repr():
     assert "sk-secret-value" not in repr(load_settings(FULL_ENV))
+
+
+def test_env_file_does_not_override_real_env_vars(monkeypatch, tmp_path):
+    """Cloud Run sets real env vars; a .env file must never override them."""
+    import dotenv
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "OPENAI_API_KEY=sk-from-file\nOPENAI_BASE_URL=https://file.test/v1\nMODEL=from-file\n"
+    )
+    monkeypatch.setattr(
+        "app.config.load_dotenv", lambda override: dotenv.load_dotenv(env_file, override=override)
+    )
+    for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("MODEL", "from-env")
+
+    settings = load_settings()
+    assert settings.model == "from-env"  # real env var wins
+    assert settings.openai_base_url == "https://file.test/v1"  # missing ones come from .env

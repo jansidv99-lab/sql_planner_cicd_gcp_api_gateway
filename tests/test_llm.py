@@ -5,7 +5,8 @@ import openai
 import pytest
 
 from app.config import Settings
-from app.llm import LLMError, complete
+from app.llm import MAX_RETRIES, TIMEOUT_SECONDS, LLMError, complete
+from app.llm import get_client as real_get_client  # captured before the test guard
 
 SETTINGS = Settings(
     openai_api_key="sk-secret-value",
@@ -76,3 +77,12 @@ def test_sdk_errors_mapped(error, expected):
         complete("s", "u", settings=SETTINGS, client=FakeClient(error=error))
     assert exc.value.__cause__ is error
     assert "sk-secret-value" not in str(exc.value)
+
+
+def test_get_client_builds_configured_client():
+    real_get_client.cache_clear()
+    client = real_get_client(SETTINGS)
+    assert str(client.base_url).rstrip("/") == "https://example.test/v1"
+    assert client.max_retries == MAX_RETRIES
+    assert client.timeout == TIMEOUT_SECONDS
+    assert real_get_client(SETTINGS) is client  # cached
