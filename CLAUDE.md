@@ -4,8 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phase 0 (setup) is done; `app/*.py` and `streamlit_app.py` are placeholders filled in by later
-phases (see `plan/00_master_plan.md`). Python 3.11, with dependencies pinned in `requirements*.txt`.
+Phases 0–7 are done (app runs locally); Docker, CI, CD and logging/tracing are next
+(see `plan/00_master_plan.md`). Python 3.11, with dependencies pinned in `requirements*.txt`.
+
+## Architecture
+
+`streamlit_app.py` → `app/chain.py: run(request, columns)` → Planner → Coder → Reviewer, each once.
+
+- `app/schema.py` is the single source of truth for the `sales` table; `validate_selection` and
+  `schema_for_prompt` (only the selected columns) are used by every step.
+- `app/planner.py` / `app/coder.py` call the LLM through an injected `llm: LLMFn` (default
+  `app.llm.complete`); tests pass fakes, so no test hits the real API. All prompt text is in
+  `app/prompts.py`. The Planner can stop early with `CANNOT_ANSWER:`.
+- `app/reviewer.py` is the deterministic gate (sqlglot, BigQuery dialect, no LLM): one statement,
+  read-only, only `sales` (or CTEs), no `*` except `COUNT(*)`, only selected columns or query aliases.
+- `app/chain.py` turns expected errors into a `ChainResult.status` + message (keeping partial
+  results); unexpected exceptions propagate. The UI renders by status and holds no logic.
+- The openai SDK (3.x) uses `httpx2`, not `httpx`. UI tests use `streamlit.testing.v1.AppTest`
+  and patch `app.chain.run` / `app.config.load_settings`.
 
 ## Commands
 
