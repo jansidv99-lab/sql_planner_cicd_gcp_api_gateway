@@ -1,0 +1,118 @@
+# =============================================================================
+# CI: Continuous Integration                        (created in Phase 10)
+# Plan: plan/11_phase10_ci.md
+# =============================================================================
+# What CI does: VERIFIES the code. It never deploys anything.
+#
+#   CI (this file, Phase 10)            | CD (cd.yml, Phase 11, not created yet)
+#   ------------------------------------+---------------------------------------
+#   Runs on every pull request and on   | Runs only on `main`, and only after
+#   every push to `main`                | this CI workflow has passed
+#   Checks: lint, format, tests,        | Builds the image and PUSHES it to
+#   Docker build + container smoke test | Artifact Registry, then DEPLOYS it to
+#                                       | Cloud Run
+#   Image is built and thrown away      | Image is tagged with the commit SHA
+#   (never pushed anywhere)             | and kept (enables rollback)
+#   Read-only token, NO secrets, NO GCP | Needs GCP access (Workload Identity
+#   access                              | Federation) and the API key from
+#                                       | Secret Manager
+#   Failure = the PR shouldn't be merged| Failure = production isn't updated
+# =============================================================================
+
+name: CI
+
+# --- Triggers (Phase 10) ------------------------------------------------------
+# pull_request: checks every PR before it's merged (branch -> PR -> merge workflow).
+# push to main: re-checks the merged result; Phase 11's CD will wait for this run.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# --- Security (Phase 10) ------------------------------------------------------
+# The workflow token can only read the repo: CI can't change code, releases or settings.
+permissions:
+  contents: read
+
+# --- Efficiency (Phase 10) ----------------------------------------------------
+# A new push to the same branch/PR cancels the outdated run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  # Job 1: quality: runs the Phase 8 quality gate, unchanged
+  # ===========================================================================
+  # The 3 commands are the gate defined in Phase 8 (plan/09_phase8_tests_quality.md);
+  # the tests themselves were written in Phases 1-7, one test file per module.
+  # The LLM is always faked (tests/conftest.py blocks real calls), so no API key is needed.
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Python 3.11 = same version as local (Phase 0) and the Docker image (Phase 9).
+      # pip cache keyed on the pinned requirements files (Phase 0, + pytest-cov in Phase 8).
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - run: pip install -r requirements-dev.txt
+
+      # Phase 8 gate, step 1: lint (ruff settings in pyproject.toml, Phase 0).
+      - run: ruff check .
+
+      # Phase 8 gate, step 2: code formatting check (ruff format, added in Phase 8).
+      - run: ruff format --check .
+
+      # Phase 8 gate, step 3: all tests + coverage; fails if coverage of app/ < 90% (Phase 8).
+      # Covers schema/config (Phase 1), LLM client (2), Planner (3), Coder (4),
+      # Reviewer (5), chain (6) and Streamlit UI via AppTest (7).
+      - run: pytest --cov
+
+  # ===========================================================================
+  # Job 2: docker: verifies the Phase 9 Dockerfile (build only, NO push)
+  # ===========================================================================
+  # Runs only if `quality` passed, so images are only built from code that passed the gate.
+  # Pushing the image and deploying it is CD's job (Phase 11), not CI's.
+  docker:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Builds the Dockerfile + .dockerignore from Phase 9.
+      # load: true keeps the image on this runner for the smoke test; nothing is pushed.
+      # type=gha caches image layers between CI runs for faster builds.
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: sql-planner:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Smoke test (Phase 10): proves the image actually starts and serves the app.
+      # - Port 8080 = the default $PORT set in the Phase 9 Dockerfile (Cloud Run's convention).
+      # - /_stcore/health = Streamlit's built-in health endpoint for the Phase 7 UI;
+      #   Phase 11 will use the same endpoint as Cloud Run's startup probe.
+      # - `whoami` must print `appuser` = the non-root user from the Phase 9 Dockerfile.
+      # - No API key is given: the app still starts (it shows "App is not configured",
+      #   from Phase 7), which is enough to prove the container works.
+      - name: Smoke test container
+        run: |
+          docker run -d --name app -p 8080:8080 sql-planner:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/_stcore/health; then
+              echo " <- health OK"
+              docker exec app whoami
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs app
+          exit 1

@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phases 0–8 are done (app runs locally, quality gate in place). Phase 9's `Dockerfile` is written
-but not yet built locally (Docker Desktop wasn't running); CI, CD and logging/tracing are next
+Phases 0–10 are done: app, quality gate, Docker image (verified in CI) and GitHub Actions CI.
+CD to Cloud Run (Phase 11) and logging/tracing (Phase 12) are next
 (see `plan/00_master_plan.md`). Python 3.11, with dependencies pinned in `requirements*.txt`.
 
 ## Architecture
@@ -57,6 +57,17 @@ values); mount it read-only instead and let python-dotenv parse it. The image co
 
 `tests/conftest.py` fails any test that builds the real OpenAI client: pass a fake `llm=`
 (Planner/Coder/chain) or `client=` (`app.llm.complete`) instead.
+
+## Git workflow and CI
+
+- Never commit directly to `main`: work on a branch, open a PR (`gh pr create`), wait for CI, and
+  merge only after the user approves.
+- Repo: `jansidv99-lab/sql_planner_cicd_gcp` (private). `.github/workflows/ci.yml` runs on PRs and
+  pushes to `main`: job `quality` (the gate above) then job `docker` (build image + container
+  smoke test on `/_stcore/health`). CI needs no secrets.
+- `git push` authenticates via Git Credential Manager; the `gh` token has no `workflow` scope.
+- Branch protection isn't available (private repo on a free plan), so "CI green before merge"
+  is a convention, not enforced by GitHub.
 
 ## Goal
 

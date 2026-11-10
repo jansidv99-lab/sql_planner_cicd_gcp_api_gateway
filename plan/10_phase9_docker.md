@@ -1,6 +1,6 @@
 # Phase 9 — Containerize (detailed plan)
 
-**Status:** IMPLEMENTED, NOT YET VERIFIED. Files written and committed at your request; Steps 9.5–9.6 (local build and checks) are pending because Docker Desktop wasn't running. CI (Phase 10) builds and smoke-tests the image.
+**Status:** DONE. Verified in CI (PR #1, Phase 10): image builds, container serves `/_stcore/health` (`ok`) and runs as `appuser`. Local Docker Desktop checks (9.5–9.6) were skipped.
 **Part of:** [00_master_plan.md](00_master_plan.md)
 **Depends on:** Phase 7 (Streamlit app) ✅, Phase 8 (LF line endings, quality gate) ✅.
 **Unblocks:** Phase 10 (CI builds this image), Phase 11 (Cloud Run runs this image).
