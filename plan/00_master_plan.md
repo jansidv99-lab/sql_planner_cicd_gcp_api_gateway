@@ -181,16 +181,28 @@ Each phase lists its **purpose**, **steps**, **depends on** and **done when**. B
 - **Depends on:** Phase 10; a GCP project (`GCP_PROJECT_ID` in `.env`).
 - **Done when:** merging to `main` updates the live Cloud Run URL.
 
+### Phase 12 — Logging and tracing
+- **Purpose:** see what the app does in production: which requests fail, at which step, and how long each step takes. (Split out of Phase 6 at your request, so the chain stays focused on its logic.)
+- **Steps:**
+  1. Logging setup: Python `logging`, structured (JSON) lines on stdout so Cloud Run sends them to **Cloud Logging** with proper severity levels.
+  2. One log line per chain run: status, selected columns, request **length** (never the request text, prompts or API key), per-step durations.
+  3. Tracing: a trace per chain run with one span per step (Planner, Coder, Reviewer) and the LLM calls, exported to **Cloud Trace** (OpenTelemetry). Off locally unless enabled.
+  4. Tests: log line content (no sensitive data) and spans created per step, using in-memory exporters.
+  5. Detailed plan doc with choices (library, sampling rate) for your review first.
+- **Depends on:** Phase 6 (chain to instrument); verified end to end after Phase 11 (Cloud Run).
+- **Done when:** a production request shows a log entry in Cloud Logging and a trace with per-step spans in Cloud Trace.
+
 ---
 
 ## 5. Dependency summary
 
 ```
 P0 ─► P1 ─► P2 ─► P3 ─► P4 ─┐
-       │                    ├─► P6 ─► P7 ─► P8 ─► P9 ─► P10 ─► P11
+       │                    ├─► P6 ─► P7 ─► P8 ─► P9 ─► P10 ─► P11 ─► P12
        └──────────► P5 ─────┘
 ```
 P5 (Reviewer) needs only the schema, so it can be built alongside P2–P4.
+P12 (logging and tracing) needs only P6 to build, but is verified on Cloud Run after P11.
 
 ## 6. Decisions
 
@@ -201,3 +213,5 @@ P5 (Reviewer) needs only the schema, so it can be built alongside P2–P4.
 | 3 | GCP hosting target? | **Cloud Run** ✅ |
 | 4 | Retries when the Reviewer fails? | **No retries** ✅: show the errors to the user |
 | 5 | Execute the SQL on data? | **No** ✅: code generation only, no data |
+| 6 | Chain failures: status + message or exceptions? | **Status + message** ✅ |
+| 7 | Logging and tracing? | **Separate phase** ✅ (Phase 12) |
