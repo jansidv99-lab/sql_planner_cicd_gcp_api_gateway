@@ -106,7 +106,10 @@ jobs:
           echo "URL=${URL}" >> "$GITHUB_ENV"
 
       # --- Step 11.11: smoke check the live service -------------------------------
-      # Uses an identity token so the check also works while the service is private.
+      # Expects the service to be PUBLIC (allUsers invoker, set once by the owner in
+      # step 11.13). The identity-token attempt is best effort only: with the WIF
+      # credentials it isn't accepted, so on a private service this check gets 403
+      # (seen on the first CD run before access was opened).
       - name: Smoke check
         run: |
           TOKEN="$(gcloud auth print-identity-token --audiences="${URL}" 2>/dev/null || true)"

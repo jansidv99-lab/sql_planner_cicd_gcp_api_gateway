@@ -1,6 +1,6 @@
 # Phase 11 — CD Pipeline to Cloud Run (detailed plan)
 
-**Status:** DRAFT, waiting for review and permission.
+**Status:** DONE. Setup script run and verified; PR #2 merged; first CD run deployed revision `sql-planner-00001` but its smoke check got 403 (service still private: the CD identity token isn't accepted); service made public (step 11.13) and a manual CD run deployed `sql-planner-00002` with the smoke check green. URL: https://sql-planner-309866353676.asia-south1.run.app
 **Part of:** [00_master_plan.md](00_master_plan.md)
 **Depends on:** Phase 10 (CI on GitHub) ✅, Phase 9 (Docker image, verified in CI) ✅, Phase 1 config (reads `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL` from env vars) ✅.
 **Unblocks:** Phase 12 (logging and tracing, verified on Cloud Run).

@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phases 0–10 are done: app, quality gate, Docker image (verified in CI) and GitHub Actions CI.
-Phase 11 (CD to Cloud Run) is in progress; logging/tracing (Phase 12) is next
+Phases 0–11 are done: app, quality gate, Docker image, GitHub Actions CI, and CD to Cloud Run
+(public: https://sql-planner-309866353676.asia-south1.run.app). Logging/tracing (Phase 12) is next
 (see `plan/00_master_plan.md`). Python 3.11, with dependencies pinned in `requirements*.txt`.
 
 ## Architecture
@@ -80,8 +80,9 @@ values); mount it read-only instead and let python-dotenv parse it. The image co
   provider `github-sql-planner` (only this repo's `main`). Config lives in GitHub repo variables.
 - The same GCP project hosts another app's resources (`gh-deployer`, `run-runtime`,
   `github-provider`, repo `apps`, secret `openai-api-key`): never modify them.
-- The deployer has `run.developer`, so CD can't change who may invoke the service; making it
-  public is a one-time owner action (`add-iam-policy-binding ... --member=allUsers`).
+- The service is public (`allUsers` → `roles/run.invoker`, set once by the owner). The deployer
+  has `run.developer`, so CD can't change access. CD's smoke check relies on public access: on a
+  private service it gets 403.
 - Rollback: `gcloud run services update-traffic sql-planner --region asia-south1
   --to-revisions <previous-revision>=100`, or re-run CD from the Actions tab.
 
