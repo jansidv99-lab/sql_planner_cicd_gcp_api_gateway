@@ -10,6 +10,8 @@ the original repo; this repo deploys its own copy to dedicated GCP resources
 (`plan/v2_api_gateway/01_dedicated_gcp_resources.md`, done). Live (public):
 https://sql-planner-apigw-lxswvdduiq-el.a.run.app
 Each new body of work gets its own plan folder under `plan/` (e.g. `plan/v1_app_development/`).
+Next: an LLM API gateway (`gateway/`, phases G0–G15) per `plan/v2_api_gateway/00_master_plan.md`;
+design docs (concepts, architecture, API contract, ADRs, threat model) are in `docs/gateway/`.
 Python 3.11, with dependencies pinned in `requirements*.txt`.
 
 ## Architecture
