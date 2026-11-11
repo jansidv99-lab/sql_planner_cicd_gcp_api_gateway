@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project status
 
 All phases (0–12) are done: app, quality gate, Docker image, GitHub Actions CI, CD to Cloud Run
-(public: https://sql-planner-309866353676.asia-south1.run.app) and logging/tracing. Status table: `plan/00_master_plan.md`
-(see `plan/00_master_plan.md`). Python 3.11, with dependencies pinned in `requirements*.txt`.
+(public: https://sql-planner-309866353676.asia-south1.run.app) and logging/tracing. Status table: `plan/00_master_plan.md`.
+Python 3.11, with dependencies pinned in `requirements*.txt`.
 
 ## Architecture
 
@@ -111,7 +111,8 @@ Implement a "SQL script generator" as a prompt chain in Python:
 
 1. **Planner:** generates the outline, a high-level plan.
 2. **Coder:** generates the SQL code based on the outline.
-3. **Reviewer (gate check):** checks that the generated SQL parses , no retries.
+3. **Reviewer (gate check):** deterministic check of the generated SQL (parses, plus the safety rules in
+   Architecture), no retries.
 4. **UI:** a Streamlit app where the user enters input and sees the output.
 5. **CI/CD pipeline:** production-ready app with full CI and CD, deploying to GCP.
 6. **Schema:** a fixed `sales` table with 4 columns: `order_date`, `quantity`, `product`, `amount`. The user may only select
@@ -126,7 +127,7 @@ Implement a "SQL script generator" as a prompt chain in Python:
 
 ## Environment
 
-`.env` (contains secrets — never commit; add to `.gitignore` when the repo is initialized) defines:
+Copy `.env.example` to `.env` and fill it in (`.env` holds secrets and is gitignored). It defines:
 - `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL` — LLM access via an OpenAI-compatible endpoint; read the model name from `MODEL`, don't hardcode it.
 - `GCP_PROJECT_ID`, `GCP_PROJECT_NUMBER` — deployment target.
 
