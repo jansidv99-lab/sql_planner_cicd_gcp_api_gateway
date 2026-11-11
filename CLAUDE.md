@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project status
 
 All phases (0–12) are done: app, quality gate, Docker image, GitHub Actions CI, CD to Cloud Run
-(public: https://sql-planner-309866353676.asia-south1.run.app) and logging/tracing. Status table: `plan/00_master_plan.md`.
+(public: https://sql-planner-309866353676.asia-south1.run.app) and logging/tracing. Status table: `plan/v1_app_development/00_master_plan.md`.
+Each new body of work gets its own plan folder under `plan/` (e.g. `plan/v1_app_development/`).
 Python 3.11, with dependencies pinned in `requirements*.txt`.
 
 ## Architecture
@@ -62,22 +63,29 @@ values); mount it read-only instead and let python-dotenv parse it. The image co
 
 - Never commit directly to `main`: work on a branch, open a PR (`gh pr create`), wait for CI, and
   merge only after the user approves.
-- Repo: `jansidv99-lab/sql_planner_cicd_gcp` (private). `.github/workflows/ci.yml` runs on PRs and
+- Repo: `jansidv99-lab/sql_planner_cicd_gcp_api_gateway` (public; copied from the original
+  `jansidv99-lab/sql_planner_cicd_gcp`). `.github/workflows/ci.yml` runs on PRs and
   pushes to `main`: job `quality` (the gate above) then job `docker` (build image + container
   smoke test on `/_stcore/health`). CI needs no secrets.
 - `git push` authenticates via Git Credential Manager; the `gh` token has no `workflow` scope.
-- Branch protection isn't available (private repo on a free plan), so "CI green before merge"
-  is a convention, not enforced by GitHub.
+- Branch protection isn't configured, so "CI green before merge" is a convention, not enforced
+  by GitHub. (The original repo was private on a free plan, where it isn't available; this
+  repo is public, so it could be enabled.)
 
 ## CD (Cloud Run)
 
+- **Not yet wired up for this repo.** Everything below was set up for the original
+  `sql_planner_cicd_gcp` repo: `scripts/gcp_setup.sh` still sets `GITHUB_REPO` to it, so the WIF
+  provider rejects this repo; the GitHub repo variables CD reads (`GCP_PROJECT_ID`, `GCP_REGION`,
+  `WIF_PROVIDER`, `DEPLOYER_SA`, `RUNTIME_SA`, `OPENAI_BASE_URL`, `MODEL`) don't exist here yet;
+  and both repos would deploy to the same Cloud Run service `sql-planner` unless names change.
 - `.github/workflows/cd.yml` runs after CI succeeds on `main` (`workflow_run`) or manually
   (`workflow_dispatch`): keyless auth (WIF) → build → push to Artifact Registry (tag = commit SHA)
   → `gcloud run deploy sql-planner` (region `asia-south1`) → health check. `workflow_run` only
   uses the workflow file from `main`, so CD changes can't be tested on a PR.
 - One-time setup is `scripts/gcp_setup.sh` (re-runnable). Dedicated resources: repo `sql-planner`,
   secret `sql-planner-openai-api-key`, SAs `sql-planner-runtime` / `sql-planner-deployer`, WIF
-  provider `github-sql-planner` (only this repo's `main`). Config lives in GitHub repo variables.
+  provider `github-sql-planner` (currently only the original repo's `main`). Config lives in GitHub repo variables.
 - The same GCP project hosts another app's resources (`gh-deployer`, `run-runtime`,
   `github-provider`, repo `apps`, secret `openai-api-key`): never modify them.
 - The service is public (`allUsers` → `roles/run.invoker`, set once by the owner). The deployer
