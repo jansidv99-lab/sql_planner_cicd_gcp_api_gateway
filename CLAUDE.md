@@ -43,6 +43,8 @@ pytest                                        # all tests (LLM is faked; no API 
 pytest tests/test_schema.py::test_name        # a single test
 streamlit run streamlit_app.py                # run the UI
 python -m app.llm                             # one real LLM smoke call (costs a request)
+uvicorn --factory gateway.main:create_app --port 8081 --no-access-log   # run the gateway
+pytest tests/gateway                          # gateway tests only
 ```
 
 Quality gate (CI runs exactly this; all must pass):
@@ -104,6 +106,24 @@ values); mount it read-only instead and let python-dotenv parse it. The image co
   prompt or the GitHub UI): writing to Secret Manager (so `gcp_setup.sh` on a fresh setup),
   granting `allUsers` access, and merging PRs to `main` (it triggers a production deploy).
   Read-only `gcloud` checks and the non-secret steps of the setup script are allowed.
+
+## LLM gateway (`gateway/`, phases G0–G15)
+
+- Separate deployable from `app/` (no imports between them). Contract and design: `docs/gateway/`
+  (OpenAI-compatible API, field allowlist, error table, threat model); status table:
+  `plan/v2_api_gateway/00_master_plan.md`. Not deployed until G4.
+- `gateway/main.py: create_app(settings)` is a factory (no side effects at import): settings from
+  `GATEWAY_*` env vars (`gateway/config.py`, all problems reported at once, startup fails fast),
+  lifespan opens one shared `httpx2.AsyncClient` on `app.state.http`.
+- Every error is OpenAI-shaped (`gateway/errors.py`): raise a `GatewayError` subclass. Unexpected
+  exceptions are turned into 500s by `RequestIdMiddleware` (not an `Exception` handler, which
+  Starlette runs outside our middleware and would drop `X-Request-ID`).
+- `RequestIdMiddleware` (pure ASGI, stream-safe) sets `request_id_var`; every `gateway` log line
+  carries it, plus one `request` access line (path only, never the query string or bodies).
+- Runtime deps are in `requirements-gateway.txt` (the planner image doesn't get them); use
+  `httpx2` (already used by the openai SDK and Starlette's `TestClient`), not `httpx`.
+- Tests: `tests/gateway/conftest.py` blocks real upstream connections (use `httpx2.MockTransport`)
+  and captures logs via the `logs` fixture; build apps with the `app`/`client` fixtures.
 
 ## Logging and tracing (Phase 12)
 

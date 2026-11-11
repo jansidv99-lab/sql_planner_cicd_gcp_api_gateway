@@ -10,7 +10,7 @@ testpaths = ["tests"]
 quote-style = "double"
 
 [tool.coverage.run]
-source = ["app"]
+source = ["app", "gateway"]
 
 [tool.coverage.report]
 fail_under = 90

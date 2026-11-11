@@ -2,14 +2,14 @@
 
 **Status:** APPROVED (2026-11-11). Prerequisite done: dedicated GCP resources for this repo
 ([01_dedicated_gcp_resources.md](01_dedicated_gcp_resources.md)). G0 design docs written
-(`docs/gateway/`); next: Phase G1 plan doc.
+(`docs/gateway/`); G1 skeleton implemented; next: Phase G2 plan doc.
 
 | Phase | Plan doc | Result |
 |---|---|---|
 | Pre: dedicated GCP resources | `01_dedicated_gcp_resources.md` | ✅ |
 | G0 Concepts and design | `02_phaseG0_concepts_design.md` | ✅ `docs/gateway/` |
-| G1 Gateway skeleton | `03_phaseG1_skeleton.md` | ⏳ next |
-| G2 Pass-through proxy | `04_phaseG2_passthrough.md` | |
+| G1 Gateway skeleton | `03_phaseG1_skeleton.md` | ✅ 39 gateway tests, coverage 100 % |
+| G2 Pass-through proxy | `04_phaseG2_passthrough.md` | ⏳ next |
 | G3 Client authN/authZ | `05_phaseG3_auth.md` | |
 | G4 Deploy the gateway | `06_phaseG4_deploy.md` | |
 | G5 Planner as first client | `07_phaseG5_planner_client.md` | |
