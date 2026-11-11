@@ -10,8 +10,8 @@ the original repo; this repo deploys its own copy to dedicated GCP resources
 (`plan/v2_api_gateway/01_dedicated_gcp_resources.md`, done). Live (public):
 https://sql-planner-apigw-lxswvdduiq-el.a.run.app
 Each new body of work gets its own plan folder under `plan/` (e.g. `plan/v1_app_development/`).
-Next: an LLM API gateway (`gateway/`, phases G0–G15) per `plan/v2_api_gateway/00_master_plan.md`;
-design docs (concepts, architecture, API contract, ADRs, threat model) are in `docs/gateway/`.
+Next: the LLM API gateway (`gateway/`, phases G0–G15). The current phase is in the status table
+in `plan/v2_api_gateway/00_master_plan.md`; design docs (concepts, architecture, API contract, ADRs, threat model) are in `docs/gateway/`.
 Python 3.11, with dependencies pinned in `requirements*.txt`.
 
 ## Architecture
@@ -50,7 +50,7 @@ pytest tests/gateway                          # gateway tests only
 Quality gate (CI runs exactly this; all must pass):
 
 ```powershell
-ruff check .; ruff format --check .; pytest --cov   # coverage of app/ must be >= 90%
+ruff check .; ruff format --check .; pytest --cov   # coverage of app/ + gateway/ (combined) must be >= 90%
 ```
 
 Docker (requires Docker Desktop running):
@@ -73,7 +73,8 @@ values); mount it read-only instead and let python-dotenv parse it. The image co
 - Repo: `jansidv99-lab/sql_planner_cicd_gcp_api_gateway` (public; copied from the original
   `jansidv99-lab/sql_planner_cicd_gcp`). `.github/workflows/ci.yml` runs on PRs and
   pushes to `main`: job `quality` (the gate above) then job `docker` (build image + container
-  smoke test on `/_stcore/health`). CI needs no secrets.
+  smoke test on `/_stcore/health`). CI needs no secrets. The `docker` job builds only the
+  planner image; the gateway gets its own image and deploy in G4.
 - `git push` authenticates via Git Credential Manager; the `gh` token has no `workflow` scope.
 - Branch protection isn't configured, so "CI green before merge" is a convention, not enforced
   by GitHub. (The original repo was private on a free plan, where it isn't available; this
@@ -171,6 +172,10 @@ Implement a "SQL script generator" as a prompt chain in Python:
 Copy `.env.example` to `.env` and fill it in (`.env` holds secrets and is gitignored). It defines:
 - `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL` — LLM access via an OpenAI-compatible endpoint; read the model name from `MODEL`, don't hardcode it.
 - `GCP_PROJECT_ID`, `GCP_PROJECT_NUMBER` — deployment target.
+- `GATEWAY_PROVIDER_BASE_URL`, `GATEWAY_PROVIDER_API_KEY`, `GATEWAY_DEFAULT_MODEL` (required) and
+  `GATEWAY_LOG_LEVEL` (default `INFO`) — gateway settings. The base URL must use `https://`;
+  `http://` is allowed only for `localhost` or `127.0.0.1` (a local fake provider). `.env` never
+  overrides variables already set in the environment.
 
 ## Workflow rules
 
