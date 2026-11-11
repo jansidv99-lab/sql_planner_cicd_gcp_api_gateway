@@ -50,6 +50,18 @@ export PYTHONWARNINGS=ignore   # silence gcloud's Python version notices
 
 # Print a command, then run it (never used for commands that carry the secret value).
 run() { echo "+ $*"; "$@"; }
+# Like run, but retries: a just-created service account takes a few seconds to become
+# usable in IAM policies ("Service account ... does not exist").
+run_retry() {
+  echo "+ $*"
+  local i
+  for i in 1 2 3 4 5 6; do
+    "$@" && return 0
+    echo "  not ready yet, retrying in 10s ($i/6)" >&2
+    sleep 10
+  done
+  "$@"
+}
 g() { gcloud --project "$PROJECT_ID" --quiet "$@"; }
 exists() { "$@" >/dev/null 2>&1; }
 step() { echo; echo "=== $* ==="; }
@@ -91,11 +103,11 @@ step "3. Runtime service account '$RUNTIME_SA_ID'"
 exists g iam service-accounts describe "$RUNTIME_SA" \
   || run g iam service-accounts create "$RUNTIME_SA_ID" \
        --display-name="$APP Cloud Run runtime"
-run g secrets add-iam-policy-binding "$SECRET" \
+run_retry g secrets add-iam-policy-binding "$SECRET" \
   --member="serviceAccount:$RUNTIME_SA" --role=roles/secretmanager.secretAccessor >/dev/null
 # roles/cloudtrace.agent can only WRITE trace data. Logs need no role: Cloud Run
 # collects the app's stdout (structured JSON) automatically.
-run g projects add-iam-policy-binding "$PROJECT_ID" \
+run_retry g projects add-iam-policy-binding "$PROJECT_ID" \
   --member="serviceAccount:$RUNTIME_SA" --role=roles/cloudtrace.agent --condition=None >/dev/null
 
 # --- 4. Cloud Run service (placeholder until the first CD deploy) -------------
@@ -105,7 +117,7 @@ step "4. Cloud Run service '$SERVICE'"
 if exists g run services describe "$SERVICE" --region "$REGION"; then
   echo "exists, skipping create"
 else
-  run g run deploy "$SERVICE" --region "$REGION" --image "$PLACEHOLDER_IMAGE" \
+  run_retry g run deploy "$SERVICE" --region "$REGION" --image "$PLACEHOLDER_IMAGE" \
     --service-account "$RUNTIME_SA" --no-allow-unauthenticated \
     --min-instances 0 --max-instances 1 --labels "app=$APP"
 fi
@@ -116,13 +128,13 @@ exists g iam service-accounts describe "$DEPLOYER_SA" \
   || run g iam service-accounts create "$DEPLOYER_SA_ID" \
        --display-name="$APP GitHub Actions deployer"
 # deploy revisions of THIS service (can't change who may invoke it, can't touch other services)
-run g run services add-iam-policy-binding "$SERVICE" --region "$REGION" \
+run_retry g run services add-iam-policy-binding "$SERVICE" --region "$REGION" \
   --member="serviceAccount:$DEPLOYER_SA" --role=roles/run.developer >/dev/null
 # push images to this app's repository only
-run g artifacts repositories add-iam-policy-binding "$AR_REPO" --location="$REGION" \
+run_retry g artifacts repositories add-iam-policy-binding "$AR_REPO" --location="$REGION" \
   --member="serviceAccount:$DEPLOYER_SA" --role=roles/artifactregistry.writer >/dev/null
 # run the service as the runtime SA (and only that SA)
-run g iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
+run_retry g iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
   --member="serviceAccount:$DEPLOYER_SA" --role=roles/iam.serviceAccountUser >/dev/null
 
 # --- 6. WIF provider: only this repo's main branch can deploy -----------------
@@ -138,7 +150,7 @@ else
     --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
     --attribute-condition="assertion.repository=='${GITHUB_REPO}' && assertion.ref=='refs/heads/main'"
 fi
-run g iam service-accounts add-iam-policy-binding "$DEPLOYER_SA" \
+run_retry g iam service-accounts add-iam-policy-binding "$DEPLOYER_SA" \
   --role=roles/iam.workloadIdentityUser \
   --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL}/attribute.repository/${GITHUB_REPO}" >/dev/null
 
