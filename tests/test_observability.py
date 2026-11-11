@@ -86,6 +86,17 @@ def test_tracing_enabled_on_cloud_run_or_flag(monkeypatch, name, value):
     assert observability.tracing_enabled() is True
 
 
+@pytest.mark.parametrize(
+    ("k_service", "expected"), [(None, "sql-planner"), ("sql-planner-apigw", "sql-planner-apigw")]
+)
+def test_service_name_follows_cloud_run_service(monkeypatch, k_service, expected):
+    if k_service is None:
+        monkeypatch.delenv("K_SERVICE", raising=False)
+    else:
+        monkeypatch.setenv("K_SERVICE", k_service)
+    assert observability.service_name() == expected
+
+
 def test_setup_tracing_installs_cloud_trace_exporter_sampling_every_run(monkeypatch):
     from opentelemetry.exporter import cloud_trace
 
