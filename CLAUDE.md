@@ -4,8 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-All phases (0–12) are done: app, quality gate, Docker image, GitHub Actions CI, CD to Cloud Run
-(public: https://sql-planner-309866353676.asia-south1.run.app) and logging/tracing. Status table: `plan/v1_app_development/00_master_plan.md`.
+v1 (phases 0–12) is done: app, quality gate, Docker image, GitHub Actions CI, CD to Cloud Run
+and logging/tracing. Status table: `plan/v1_app_development/00_master_plan.md`. v1 was built in
+the original repo; this repo deploys its own copy to dedicated GCP resources
+(`plan/v2_api_gateway/01_dedicated_gcp_resources.md`).
 Each new body of work gets its own plan folder under `plan/` (e.g. `plan/v1_app_development/`).
 Python 3.11, with dependencies pinned in `requirements*.txt`.
 
@@ -74,24 +76,26 @@ values); mount it read-only instead and let python-dotenv parse it. The image co
 
 ## CD (Cloud Run)
 
-- **Not yet wired up for this repo.** Everything below was set up for the original
-  `sql_planner_cicd_gcp` repo: `scripts/gcp_setup.sh` still sets `GITHUB_REPO` to it, so the WIF
-  provider rejects this repo; the GitHub repo variables CD reads (`GCP_PROJECT_ID`, `GCP_REGION`,
-  `WIF_PROVIDER`, `DEPLOYER_SA`, `RUNTIME_SA`, `OPENAI_BASE_URL`, `MODEL`) don't exist here yet;
-  and both repos would deploy to the same Cloud Run service `sql-planner` unless names change.
 - `.github/workflows/cd.yml` runs after CI succeeds on `main` (`workflow_run`) or manually
   (`workflow_dispatch`): keyless auth (WIF) → build → push to Artifact Registry (tag = commit SHA)
-  → `gcloud run deploy sql-planner` (region `asia-south1`) → health check. `workflow_run` only
-  uses the workflow file from `main`, so CD changes can't be tested on a PR.
-- One-time setup is `scripts/gcp_setup.sh` (re-runnable). Dedicated resources: repo `sql-planner`,
-  secret `sql-planner-openai-api-key`, SAs `sql-planner-runtime` / `sql-planner-deployer`, WIF
-  provider `github-sql-planner` (currently only the original repo's `main`). Config lives in GitHub repo variables.
-- The same GCP project hosts another app's resources (`gh-deployer`, `run-runtime`,
-  `github-provider`, repo `apps`, secret `openai-api-key`): never modify them.
-- The service is public (`allUsers` → `roles/run.invoker`, set once by the owner). The deployer
-  has `run.developer`, so CD can't change access. CD's smoke check relies on public access: on a
-  private service it gets 403.
-- Rollback: `gcloud run services update-traffic sql-planner --region asia-south1
+  → `gcloud run deploy sql-planner-apigw` (region `asia-south1`) → health check. `workflow_run`
+  only uses the workflow file from `main`, so CD changes can't be tested on a PR.
+- One-time setup is `scripts/gcp_setup.sh` (re-runnable; needs `.env` and an owner gcloud login).
+  Every name comes from `APP="sql-planner-apigw"`: Cloud Run service, Artifact Registry repo,
+  secret `sql-planner-apigw-openai-api-key`, SAs `sql-planner-apigw-runtime` /
+  `sql-planner-apigw-deployer`, WIF provider `github-sql-planner-apigw` (only this repo's
+  `main`, in the shared pool `github-pool`). Config lives in GitHub repo variables.
+- The setup script creates the service with a placeholder image so the deployer's
+  `run.developer` can be granted **on this service only** (not project-wide).
+- The same GCP project hosts other apps: never modify their resources. That includes the
+  original app (`sql-planner` service/repo/secret, `sql-planner-runtime`, `sql-planner-deployer`,
+  provider `github-sql-planner`), everything `sql-planner-pm*`, `gh-deployer`, `run-runtime`,
+  `github-provider`, repo `apps`, secret `openai-api-key`, and the `driver-*` and
+  `data-analysis-script-generator` services.
+- The service must be public (`allUsers` → `roles/run.invoker`, set once by the owner after the
+  setup script). The deployer can't change access. CD's smoke check relies on public access: on
+  a private service it gets 403.
+- Rollback: `gcloud run services update-traffic sql-planner-apigw --region asia-south1
   --to-revisions <previous-revision>=100`, or re-run CD from the Actions tab.
 
 ## Logging and tracing (Phase 12)
@@ -99,7 +103,8 @@ values); mount it read-only instead and let python-dotenv parse it. The image co
 - `app/observability.py`: `setup_logging()` attaches google-cloud-logging's `StructuredLogHandler`
   (JSON on stdout → Cloud Logging, auto-linked to the active trace; needs no credentials) to the
   `app` logger; `setup_tracing()` installs OpenTelemetry → Cloud Trace (every run sampled) only on
-  Cloud Run (`K_SERVICE`) or with `TRACING_ENABLED=true`. Both are called once from
+  Cloud Run (`K_SERVICE`) or with `TRACING_ENABLED=true`; the trace `service.name` is
+  `K_SERVICE` (fallback `sql-planner`), so each deployment's traces stay separate. Both are called once from
   `streamlit_app.py` via `st.cache_resource`.
 - Each chain run = trace `chain.run` → `planner`/`coder` (→ `llm.complete`) / `reviewer`, plus one
   log line `chain finished` (status, error type, columns, durations). Use `observability.span()`,
@@ -108,7 +113,7 @@ values); mount it read-only instead and let python-dotenv parse it. The image co
 - Tests: `tests/conftest.py` installs an in-memory span exporter (`spans` fixture) and resets the
   `app` logger after each test.
 - Log lines must be written while the relevant span is active, or they lose the trace link.
-- To inspect production: `gcloud logging read 'resource.labels.service_name="sql-planner" AND
+- To inspect production: `gcloud logging read 'resource.labels.service_name="sql-planner-apigw" AND
   jsonPayload.message="chain finished"'`, then fetch the trace by ID
   (`GET cloudtrace.googleapis.com/v1/projects/<project>/traces/<id>`); the v1 list endpoint
   returned nothing during verification.
