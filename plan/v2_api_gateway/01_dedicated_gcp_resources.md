@@ -1,6 +1,6 @@
 # Step 1: Dedicated GCP resources for this repo (detailed plan)
 
-**Status:** IN PROGRESS. Steps 1.2–1.5 implemented on branch `infra/dedicated-gcp-resources` (gate green: 141 tests, coverage 100%). Plan approved 2026-11-11. Decisions: A = `sql-planner-apigw`, B = service-level deployer, C = reuse the original app's key.
+**Status:** DONE (2026-11-11). PR #2 merged; CD run 42981418219 deployed `sql-planner-apigw-00002-bm5`, smoke check green. URL: https://sql-planner-apigw-lxswvdduiq-el.a.run.app. Decisions: A = `sql-planner-apigw`, B = service-level deployer, C = reuse the original app's key.
 **Repo:** `jansidv99-lab/sql_planner_cicd_gcp_api_gateway` (public), copied from `jansidv99-lab/sql_planner_cicd_gcp`.
 **Depends on:** v1 app, CI and CD (`plan/v1_app_development/`, all done). PR #1 (docs) should be merged first.
 **Unblocks:** later API Gateway work, which needs its own deployed service in this repo.
@@ -162,3 +162,27 @@ original repo's `.env`), or a **separate** key so spend and rotation are tracked
   (it's idempotent), and with the wrong `GITHUB_REPO` it would also set variables on the
   original repo. Step 1.2 replaces it, so only the new script exists in this repo.
 - **Cost:** one more scale-to-zero service (max 2 instances) and a small image repository.
+
+---
+
+## Outcome and verification (2026-11-11)
+
+- **Setup script:** the first run created steps 1–4 and the deployer SA, then failed binding the
+  just-created deployer ("Service account ... does not exist": IAM propagation delay). A re-run
+  finished steps 5–7. Fix merged in PR #2: IAM bindings and the placeholder deploy retry up to
+  6 × 10 s (`run_retry`).
+- **Who ran what:** Claude Code's auto mode blocked the secret write, the `allUsers` binding and
+  the PR merge, so the owner ran those; Claude ran the remaining steps and all checks.
+- **IAM (checked):** deployer has `run.developer` on `sql-planner-apigw` only (nothing on
+  `sql-planner`), `artifactregistry.writer` on the new repo only, `serviceAccountUser` on the new
+  runtime SA; runtime SA reads only the new secret and has project-level `cloudtrace.agent`;
+  provider condition = this repo + `refs/heads/main`; 7 GitHub variables set.
+- **CD:** run 42981418219 green; image `.../sql-planner-apigw/app:cd5ae06...`; `/_stcore/health`
+  returns `ok`; the owner tested the app in the browser.
+- **Logs and traces:** a `chain finished` line (`status=ok`) for `sql-planner-apigw`, linked to a
+  trace with `chain.run` → `planner`/`coder` (→ `llm.complete`) → `reviewer`; no request text or
+  SQL in attributes. Step 1.4 finding: the Cloud Trace exporter doesn't store the OTel
+  `service.name` on spans, so the change has no visible effect there; traces are found through
+  the app's own log lines.
+- **Other apps:** `sql-planner` still on `00007-2c8`; the other services unchanged
+  (`sql-planner-pm` got `00006` at 07:34 UTC from its own deployer, unrelated to this work).

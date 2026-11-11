@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 v1 (phases 0–12) is done: app, quality gate, Docker image, GitHub Actions CI, CD to Cloud Run
 and logging/tracing. Status table: `plan/v1_app_development/00_master_plan.md`. v1 was built in
 the original repo; this repo deploys its own copy to dedicated GCP resources
-(`plan/v2_api_gateway/01_dedicated_gcp_resources.md`).
+(`plan/v2_api_gateway/01_dedicated_gcp_resources.md`, done). Live (public):
+https://sql-planner-apigw-lxswvdduiq-el.a.run.app
 Each new body of work gets its own plan folder under `plan/` (e.g. `plan/v1_app_development/`).
 Python 3.11, with dependencies pinned in `requirements*.txt`.
 
@@ -97,14 +98,19 @@ values); mount it read-only instead and let python-dotenv parse it. The image co
   a private service it gets 403.
 - Rollback: `gcloud run services update-traffic sql-planner-apigw --region asia-south1
   --to-revisions <previous-revision>=100`, or re-run CD from the Actions tab.
+- Claude Code's auto mode blocks some steps; hand them to the user (`! <command>` in the
+  prompt or the GitHub UI): writing to Secret Manager (so `gcp_setup.sh` on a fresh setup),
+  granting `allUsers` access, and merging PRs to `main` (it triggers a production deploy).
+  Read-only `gcloud` checks and the non-secret steps of the setup script are allowed.
 
 ## Logging and tracing (Phase 12)
 
 - `app/observability.py`: `setup_logging()` attaches google-cloud-logging's `StructuredLogHandler`
   (JSON on stdout → Cloud Logging, auto-linked to the active trace; needs no credentials) to the
   `app` logger; `setup_tracing()` installs OpenTelemetry → Cloud Trace (every run sampled) only on
-  Cloud Run (`K_SERVICE`) or with `TRACING_ENABLED=true`; the trace `service.name` is
-  `K_SERVICE` (fallback `sql-planner`), so each deployment's traces stay separate. Both are called once from
+  Cloud Run (`K_SERVICE`) or with `TRACING_ENABLED=true`. The OTel resource's `service.name` is
+  `K_SERVICE` (fallback `sql-planner`), but the Cloud Trace exporter doesn't store it on spans:
+  find an app's traces through its own `chain finished` log lines (see below). Both are called once from
   `streamlit_app.py` via `st.cache_resource`.
 - Each chain run = trace `chain.run` → `planner`/`coder` (→ `llm.complete`) / `reviewer`, plus one
   log line `chain finished` (status, error type, columns, durations). Use `observability.span()`,
